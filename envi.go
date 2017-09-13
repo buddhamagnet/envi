@@ -178,6 +178,10 @@ func setValue(field reflect.Value, value string, separator string) error {
 		}
 		field.SetFloat(val)
 	case reflect.Slice:
+		// Validate separator and set default
+		if separator == Blank {
+			separator = ","
+		}
 		values := strings.Split(value, separator)
 		newSlice := reflect.MakeSlice(refType, len(values), len(values))
 		for i, val := range values {
