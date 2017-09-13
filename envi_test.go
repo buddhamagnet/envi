@@ -45,6 +45,12 @@ func TestParse(t *testing.T) {
 	assertEqual(t, float32(0.5), testEnv.Rate, "")
 	assertEqual(t, "postgres://localhost:5432/db", testEnv.DbHost, "")
 
+	// Change data
+	ChangeValue("Rate", "0.8")
+	ChangeValue("Port", "2323")
+	assertEqual(t, float32(0.8), testEnv.Rate, "")
+	assertEqual(t, 2323, testEnv.Port, "")
+
 	// Slice
 	var numbers = [5]int{1,2,3,4,5}
 

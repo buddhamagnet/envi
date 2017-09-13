@@ -22,4 +22,10 @@ func main() {
 	}
 
 	fmt.Printf("%+v\n", env)
+	err = envi.ChangeValue("Intent", "33")
+	if err != nil {
+		panic(fmt.Sprintf("%+v\n", err))
+	}
+
+	fmt.Printf("%+v\n", env)
 }

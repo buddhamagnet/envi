@@ -26,8 +26,13 @@ const (
 	Required = "required"
 )
 
+// This is copy of environments
+var copyEnv interface{}
+
 // Public functions
 func Parse(val interface{}) error {
+	// Copy Environments
+	copyEnv = val
 
 	ptrValue := reflect.ValueOf(val)
 	if ptrValue.Kind() != reflect.Ptr {
@@ -41,6 +46,19 @@ func Parse(val interface{}) error {
 	return do(refValue)
 }
 
+func ChangeValue(key string, value string) error {
+
+	ptrValue := reflect.ValueOf(copyEnv)
+	if ptrValue.Kind() != reflect.Ptr {
+		return ErrNotAPtrStruct
+	}
+	refValue := ptrValue.Elem()
+	if refValue.Kind() != reflect.Struct {
+		return ErrNotAPtrStruct
+	}
+
+	return doChange(refValue, key, value)
+}
 // Private functions
 func do(val reflect.Value) error {
 
@@ -70,6 +88,33 @@ func do(val reflect.Value) error {
 	if len(errs) == 0 {
 		return nil
 	}
+	return errors.New(strings.Join(errs, ". "))
+}
+
+func doChange(val reflect.Value, key string, value string) error {
+	// Declare vars
+	var errs []string
+	refType := val.Type()
+
+	if value == Blank {
+		errs = append(errs, fmt.Sprintf("Value %s is Blank", value))
+	}
+
+	rValue := val.FieldByName(key)
+	if rValue.IsValid() {
+		separator := refType.Field(0).Tag.Get(EnvSeparator)
+		if err := setValue(rValue, value, separator); err != nil {
+			errs = append(errs, err.Error())
+		}
+
+	} else {
+		errs = append(errs, fmt.Sprintf("Field %s not exists", key))
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+
 	return errors.New(strings.Join(errs, ". "))
 }
 

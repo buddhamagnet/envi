@@ -36,7 +36,7 @@ func main() {
 You can run it like this:
 
 ```sh
-$ NTENT=5 PROD=true HOSTS="127.0.0.1:localhost" SECTOR="a:1,b:2,c:4"  go run examples/examples.go
+$ INTENT=5 PROD=true HOSTS="127.0.0.1:localhost" SECTOR="a:1,b:2,c:4"  go run examples/examples.go
 Intent:5 Ports:[3 0 0 0] IsProd:true IsDev:false Hosts:[127.0.0.1 localhost] Sector:map[a:1 b:2 c:4]}
 ```
 
