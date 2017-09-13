@@ -58,6 +58,6 @@ func TestParse(t *testing.T) {
 		assertEqual(t, "VEN", testEnv.CodeCountries["Venezuela"], "")
 		assertEqual(t, "CO", testEnv.CodeCountries["Colombia"], "")
 	} else {
-		t.Errorf("expected %#v, got %#v", map[string]string{"Chile":"CL", "Venezuela":"VEN", "Colombia":"CO"})
+		t.Errorf("expected %#v", map[string]string{"Chile":"CL", "Venezuela":"VEN", "Colombia":"CO"})
 	}
 }
