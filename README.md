@@ -71,3 +71,6 @@ By default, slice types will split the environment value on `,`; you can change 
 
 The `env` tag option `required` (e.g., `env:"MyKey,required"`) can be added
 to ensure that some environment variable is set.
+
+## TODO
+- Implement httpHandler for list env and change value.
