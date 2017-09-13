@@ -1,5 +1,5 @@
 ## ENVI
-Environment vars in Go
+Golang library for managing configuration from environment variables
 
 ## Example
 
