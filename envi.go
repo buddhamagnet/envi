@@ -1,33 +1,25 @@
 package envi
 
 import (
-	"reflect"
 	"errors"
-	"strings"
-	"os"
-	"strconv"
 	"fmt"
+	"os"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var (
 	//Errors
 	ErrNotAPtrStruct = errors.New("Expected a pointer to a Struct")
-	UnsupportedType = errors.New("Unsupported Type")
-
-	//Slices
-	sIntS = reflect.TypeOf([]int(nil))
-	SInt64S = reflect.TypeOf([]int64(nil))
-	sStringS = reflect.TypeOf([]string(nil))
-	sBoolS = reflect.TypeOf([]bool(nil))
-	sFloat32S = reflect.TypeOf([]float32(nil))
-	sFloat64S = reflect.TypeOf([]float64(nil))
 )
 
 const (
 	// Keys
-	Blank = ""
-	Env = "env"
-	EnvDefault = "envDefault"
+	Blank        = ""
+	Env          = "env"
+	EnvDefault   = "envDefault"
 	EnvSeparator = "envSeparator"
 
 	// Options Support
@@ -68,7 +60,8 @@ func do(val reflect.Value) error {
 		if value == Blank {
 			continue
 		}
-		if err := setValue(val.Field(i), refType.Field(i), value); err != nil {
+		separator := refType.Field(i).Tag.Get(EnvSeparator)
+		if err := setValue(val.Field(i), value, separator); err != nil {
 			errs = append(errs, err.Error())
 			continue
 		}
@@ -84,7 +77,7 @@ func getValue(sf reflect.StructField) (string, error) {
 	// Declare vars
 	var (
 		value string
-		err error
+		err   error
 	)
 
 	key, options := parseKeyForOption(sf.Tag.Get(Env))
@@ -135,167 +128,89 @@ func getRequired(k string) (string, error) {
 	return Blank, fmt.Errorf("Environment variable %s is required", k)
 }
 
-func setValue(field reflect.Value, sf reflect.StructField, val string) error {
+func setValue(field reflect.Value, value string, separator string) error {
+	refType := field.Type()
 
-	// Case for Type
-	// With field.Kind() get kind represents the specific kind of type that a Type represents.
-	switch field.Kind() {
-	case reflect.Slice:
-		separator := sf.Tag.Get(EnvSeparator)
-		return doHandleSlice(field, val, separator)
+	if refType.Kind() == reflect.Ptr {
+		refType = refType.Elem()
+		if field.IsNil() {
+			field.Set(reflect.New(refType))
+		}
+		field = field.Elem()
+	}
+
+	switch refType.Kind() {
 	case reflect.String:
-		field.SetString(val)
+		field.SetString(value)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		var (
+			val int64
+			err error
+		)
+		if field.Kind() == reflect.Int64 && refType.PkgPath() == "time" && refType.Name() == "Duration" {
+			var td time.Duration
+			td, err = time.ParseDuration(value)
+			val = int64(td)
+		} else {
+			val, err = strconv.ParseInt(value, 0, refType.Bits())
+		}
+		if err != nil {
+			return err
+		}
+
+		field.SetInt(val)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		val, err := strconv.ParseUint(value, 0, refType.Bits())
+		if err != nil {
+			return err
+		}
+		field.SetUint(val)
 	case reflect.Bool:
-		boolValue, err := strconv.ParseBool(val)
+		val, err := strconv.ParseBool(value)
 		if err != nil {
 			return err
 		}
-		field.SetBool(boolValue)
-	case reflect.Int:
-		intValue, err := strconv.ParseInt(val, 10, 32)
+		field.SetBool(val)
+	case reflect.Float32, reflect.Float64:
+		val, err := strconv.ParseFloat(value, refType.Bits())
 		if err != nil {
 			return err
 		}
-		field.SetInt(intValue)
-	case reflect.Int64:
-		int64Value, err := strconv.ParseInt(val, 10, 64)
-		if err != nil {
-			return err
+		field.SetFloat(val)
+	case reflect.Slice:
+		values := strings.Split(value, separator)
+		newSlice := reflect.MakeSlice(refType, len(values), len(values))
+		for i, val := range values {
+			err := setValue(newSlice.Index(i), val, "")
+			if err != nil {
+				return err
+			}
 		}
-		field.SetInt(int64Value)
-	case reflect.Uint:
-		uintValue, err := strconv.ParseUint(val, 10, 32)
-		if err != nil {
-			return err
+		field.Set(newSlice)
+	case reflect.Map:
+		newMap := reflect.MakeMap(refType)
+		if len(strings.TrimSpace(value)) != 0 {
+			pairs := strings.Split(value, ",")
+			for _, pair := range pairs {
+				kPair := strings.Split(pair, ":")
+				if len(kPair) != 2 {
+					return errors.New(fmt.Sprintf("InvalidMapItem: %q", pair))
+				}
+				k := reflect.New(refType.Key()).Elem()
+				err := setValue(k, kPair[0], "")
+				if err != nil {
+					return err
+				}
+				v := reflect.New(refType.Elem()).Elem()
+				err = setValue(v, kPair[1], "")
+				if err != nil {
+					return err
+				}
+				newMap.SetMapIndex(k, v)
+			}
 		}
-		field.SetUint(uintValue)
-	case reflect.Float32:
-		float32Value, err := strconv.ParseFloat(val, 32)
-		if err != nil {
-			return err
-		}
-		field.SetFloat(float32Value)
-	case reflect.Float64:
-		float64Value, err := strconv.ParseFloat(val, 64)
-		if err != nil {
-			return err
-		}
-		field.Set(reflect.ValueOf(float64Value))
-	default:
-		return UnsupportedType
+		field.Set(newMap)
 	}
+
 	return nil
-}
-
-func doHandleSlice(field reflect.Value, value, separator string) error {
-	if separator == Blank {
-		separator = ","
-	}
-
-	splitData := strings.Split(value, separator)
-
-	switch field.Type() {
-	case sStringS:
-		field.Set(reflect.ValueOf(splitData))
-	case sBoolS:
-		data, err := doParseBoolS(splitData)
-		if err != nil {
-			return err
-		}
-		field.Set(reflect.ValueOf(data))
-	case sIntS:
-		data, err := doParseIntS(splitData)
-		if err != nil {
-			return err
-		}
-		field.Set(reflect.ValueOf(data))
-	case SInt64S:
-		data, err := doParseInt64S(splitData)
-		if err != nil {
-			return err
-		}
-		field.Set(reflect.ValueOf(data))
-
-	case sFloat32S:
-		data, err := doParseFloat32S(splitData)
-		if err != nil {
-			return err
-		}
-		field.Set(reflect.ValueOf(data))
-	case sFloat64S:
-		data, err := doParseFloat64S(splitData)
-		if err != nil {
-			return err
-		}
-		field.Set(reflect.ValueOf(data))
-	default:
-		return errors.New(fmt.Sprintf("Unsupported Slice Type %s.", field.Type()))
-	}
-	return nil
-}
-
-func doParseBoolS(d []string) ([]bool, error) {
-	var boolSlice []bool
-
-	for _, v := range d {
-		boolValue, err := strconv.ParseBool(v)
-		if err != nil {
-			return nil, err
-		}
-
-		boolSlice = append(boolSlice, boolValue)
-	}
-	return boolSlice, nil
-}
-
-func doParseIntS(d []string) ([]int, error) {
-	var intSlice []int
-
-	for _, v := range d {
-		intValue, err := strconv.ParseInt(v, 10, 32)
-		if err != nil {
-			return nil, err
-		}
-		intSlice = append(intSlice, int(intValue))
-	}
-	return intSlice, nil
-}
-
-func doParseFloat32S(d []string) ([]float32, error) {
-	var float32Slice []float32
-
-	for _, v := range d {
-		data, err := strconv.ParseFloat(v, 32)
-		if err != nil {
-			return nil, err
-		}
-		float32Slice = append(float32Slice, float32(data))
-	}
-	return float32Slice, nil
-}
-
-func doParseInt64S(d []string) ([]int64, error) {
-	var int64Slice []int64
-
-	for _, v := range d {
-		intValue, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		int64Slice = append(int64Slice, int64(intValue))
-	}
-	return int64Slice, nil
-}
-
-func doParseFloat64S(d []string) ([]float64, error) {
-	var float64Slice []float64
-
-	for _, v := range d {
-		data, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			return nil, err
-		}
-		float64Slice = append(float64Slice, float64(data))
-	}
-	return float64Slice, nil
 }

@@ -6,11 +6,12 @@ import (
 )
 
 type environments struct {
-	Intent		int			  `env:"INTENT"`
-	Ports        []int         `env:"PORTS" envDefault:"3000"`
-	IsProd 		bool          `env:"PROD,required"`
-	IsDev 		bool          `env:"DEV"`
-	Hosts        []byte      `env:"HOSTS" envSeparator:":"`
+	Intent int            `env:"INTENT"`
+	Ports  []int          `env:"PORTS" envDefault:"3000"`
+	IsProd bool           `env:"PROD,required"`
+	IsDev  bool           `env:"DEV"`
+	Hosts  []string       `env:"HOSTS" envSeparator:":"`
+	Sector map[string]int `env:"SECTOR"`
 }
 
 func main() {
